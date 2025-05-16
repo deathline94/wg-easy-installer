@@ -1,5 +1,0 @@
----
-title: Admin Panel
----
-
-TODO

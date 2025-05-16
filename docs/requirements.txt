@@ -1,4 +1,0 @@
-mkdocs-material
-pillow
-cairosvg
-mike
