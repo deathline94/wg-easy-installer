@@ -68,9 +68,6 @@ This will:
 - **Original wg-easy Project**: This installer is built around the awesome **[wg-easy](https://github.com/wg-easy/wg-easy)** project, which provides the core WireGuard VPN functionality. Huge thanks to the wg-easy team for their work!
 - **Developed by**: **[@deathline94](https://github.com/deathline94)**
 
-## License
-
-This project is licensed under the MIT License. See the **[LICENSE](LICENSE)** file for details.
 
 ---
 
