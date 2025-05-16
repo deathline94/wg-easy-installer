@@ -7,7 +7,7 @@ A simple and automated installer script for setting up **[wg-easy](https://githu
 To install wg-easy using the we-easy-installer, run the following command as root:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/deathline94/we-easy-installer/blob/master/wg-easy-install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/deathline94/wg-easy-installer/master/wg-easy-install.sh)
 ```
 
 This will:
@@ -34,7 +34,7 @@ This will:
 
 1. **Run the Script**:
    ```bash
-   bash <(curl -fsSL https://raw.githubusercontent.com/deathline94/we-easy-installer/blob/master/wg-easy-install.sh)
+   bash <(curl -fsSL https://raw.githubusercontent.com/deathline94/wg-easy-installer/master/wg-easy-install.sh))
    ```
 
 2. **Follow Prompts** (for new installs):
