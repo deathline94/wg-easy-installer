@@ -28,7 +28,6 @@ This will:
 - **Custom WireGuard Port**: Supports any WireGuard port (not just `51820`), with proper Docker port mapping.
 - **Client Expiry Enforcement**: Daily cron job checks `client_expiry.txt` and removes expired clients from `wg0.json`, restarting the service.
 - **Minimal Dependencies**: Uses only essential tools, with no unnecessary logging or bloat.
-- **Hysteria-Inspired Style**: Clean, animated CLI interface with `print_with_delay` for a polished experience.
 
 ## Usage
 
