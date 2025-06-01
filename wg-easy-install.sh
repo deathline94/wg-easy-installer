@@ -86,17 +86,20 @@ if [ -d "/opt/wg-easy" ]; then
                                 echo "No clients found."
                             else
                                 i=1
-                                for client_name in $(jq -r '.clients | to_entries | .[] | .value.name' "$WG_JSON"); do
-                                    expiry=""
-                                    if [ -f "$EXPIRY_FILE" ]; then
-                                        expiry=$(grep "^$client_name," "$EXPIRY_FILE" | cut -d',' -f2)
+                                jq -r '.clients | to_entries | .[] | .value.name' "$WG_JSON" | while IFS= read -r client_name; do
+                                    if [ -n "$client_name" ]; then
+                                        escaped_client_name=$(printf '%q' "$client_name")
+                                        expiry=""
+                                        if [ -f "$EXPIRY_FILE" ]; then
+                                            expiry=$(grep "^$escaped_client_name," "$EXPIRY_FILE" | cut -d',' -f2)
+                                        fi
+                                        if [ -n "$expiry" ]; then
+                                            echo "$i) $client_name (Expires: $expiry)"
+                                        else
+                                            echo "$i) $client_name (No expiry)"
+                                        fi
+                                        ((i++))
                                     fi
-                                    if [ -n "$expiry" ]; then
-                                        echo "$i) $client_name (Expires: $expiry)"
-                                    else
-                                        echo "$i) $client_name (No expiry)"
-                                    fi
-                                    ((i++))
                                 done
                             fi
                             echo ""
