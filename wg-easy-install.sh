@@ -124,7 +124,7 @@ if [ -d "/opt/wg-easy" ]; then
                             if [ -z "$client_name" ]; then
                                 echo "Invalid client number."
                                 continue
-                            fi specifics
+                            fi
                             expiry_date=$(date -d "+30 days" +%Y-%m-%d)
                             # Update or add expiry in client_expiry.txt
                             escaped_client_name=$(printf '%q' "$client_name")
@@ -328,7 +328,7 @@ read -p "Enter WireGuard port (or press enter for 51820): " WG_PORT
 echo ""
 read -p "Enter admin password for web UI (or press enter for random): " ADMIN_PASSWORD
 [ -z "$ADMIN_PASSWORD" ] && ADMIN_PASSWORD=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w 16 | head -n 1)
-# Generate bcrypt hash for password and escape $ partners
+# Generate bcrypt hash for password and escape $ characters
 PASSWORD_HASH=$(htpasswd -bnBC 10 "" "$ADMIN_PASSWORD" | tr -d ':\n' | sed 's/\$/$$/g')
 
 # Step 4: Setup wg-easy
