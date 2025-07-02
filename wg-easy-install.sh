@@ -127,10 +127,11 @@ if [ -d "/opt/wg-easy" ]; then
                             fi
                             expiry_date=$(date -d "+30 days" +%Y-%m-%d)
                             # Update or add expiry in client_expiry.txt
-                            if [ -f "$EXPIRY_FILE" ] && grep -q "^$client_name," "$EXPIRY_FILE"; then
-                                sed -i "/^$client_name,/d" "$EXPIRY_FILE"
+                            escaped_client_name=$(printf '%q' "$client_name")
+                            if [ -f "$EXPIRY_FILE" ] && grep -q "^$escaped_client_name," "$EXPIRY_FILE"; then
+                                sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
                             fi
-                            echo "$client_name,$expiry_date" >> "$EXPIRY_FILE"
+                            echo "$escaped_client_name,$expiry_date" >> "$EXPIRY_FILE"
                             echo "Expiry set for $client_name to $expiry_date (30 days from now)!"
                             ;;
                         3)
@@ -153,7 +154,8 @@ if [ -d "/opt/wg-easy" ]; then
                                 continue
                             fi
                             # Remove from expiry file
-                            sed -i "/^$client_name,/d" "$EXPIRY_FILE"
+                            escaped_client_name=$(printf '%q' "$client_name")
+                            sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
                             echo "Expiry removed for $client_name!"
                             ;;
                         4)
@@ -177,8 +179,9 @@ if [ -d "/opt/wg-easy" ]; then
                             fi
                             expiry_date=$(date -d "+30 days" +%Y-%m-%d)
                             # Update expiry in client_expiry.txt
-                            sed -i "/^$client_name,/d" "$EXPIRY_FILE"
-                            echo "$client_name,$expiry_date" >> "$EXPIRY_FILE"
+                            escaped_client_name=$(printf '%q' "$client_name")
+                            sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
+                            echo "$escaped_client_name,$expiry_date" >> "$EXPIRY_FILE"
                             echo "Expiry extended for $client_name to $expiry_date (30 days from now)!"
                             ;;
                         5)
@@ -379,25 +382,26 @@ if [ $? -ne 0 ]; then
 fi
 
 # Step 8: Setup expiry check script
-cat << EOF > /opt/wg-easy/check-expiry.sh
+cat << 'EOF' > /opt/wg-easy/check-expiry.sh
 #!/bin/bash
 WG_JSON="/opt/wg-easy/wg0.json"
 EXPIRY_FILE="/opt/wg-easy/client_expiry.txt"
-CURRENT_DATE=\$(date +%Y-%m-%d)
+CURRENT_DATE=$(date +%Y-%m-%d)
 
-if [ -f "\$EXPIRY_FILE" ]; then
+if [ -f "$EXPIRY_FILE" ]; then
     while IFS=, read -r client_name expiry_date; do
-        if [ -n "\$client_name" ] && [ -n "\$expiry_date" ]; then
-            if [[ "\$CURRENT_DATE" > "\$expiry_date" || "\$CURRENT_DATE" == "\$expiry_date" ]]; then
-                client_id=\$(jq -r ".clients | to_entries | .[] | select(.value.name == \"\$client_name\") | .key" "\$WG_JSON")
-                if [ -n "\$client_id" ]; then
-                    jq "del(.clients.\"\$client_id\")" "\$WG_JSON" > tmp.json && mv tmp.json "\$WG_JSON"
-                    sed -i "/^\$client_name,/d" "\$EXPIRY_FILE"
+        if [ -n "$client_name" ] && [ -n "$expiry_date" ]; then
+            if [[ "$CURRENT_DATE" > "$expiry_date" || "$CURRENT_DATE" == "$expiry_date" ]]; then
+                escaped_client_name=$(printf '%q' "$client_name")
+                client_id=$(jq -r ".clients | to_entries | .[] | select(.value.name == \"$client_name\") | .key" "$WG_JSON")
+                if [ -n "$client_id" ]; then
+                    jq "del(.clients.\"$client_id\")" "$WG_JSON" > tmp.json && mv tmp.json "$WG_JSON"
+                    sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
                     docker-compose -f /opt/wg-easy/docker-compose.yml restart > /dev/null 2>&1
                 fi
             fi
         fi
-    done < "\$EXPIRY_FILE"
+    done < "$EXPIRY_FILE"
 fi
 EOF
 
