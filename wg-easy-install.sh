@@ -124,7 +124,7 @@ if [ -d "/opt/wg-easy" ]; then
                             if [ -z "$client_name" ]; then
                                 echo "Invalid client number."
                                 continue
-                            fi
+                            fi specifics
                             expiry_date=$(date -d "+30 days" +%Y-%m-%d)
                             # Update or add expiry in client_expiry.txt
                             escaped_client_name=$(printf '%q' "$client_name")
@@ -328,7 +328,7 @@ read -p "Enter WireGuard port (or press enter for 51820): " WG_PORT
 echo ""
 read -p "Enter admin password for web UI (or press enter for random): " ADMIN_PASSWORD
 [ -z "$ADMIN_PASSWORD" ] && ADMIN_PASSWORD=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w 16 | head -n 1)
-# Generate bcrypt hash for password and escape $ characters
+# Generate bcrypt hash for password and escape $ partners
 PASSWORD_HASH=$(htpasswd -bnBC 10 "" "$ADMIN_PASSWORD" | tr -d ':\n' | sed 's/\$/$$/g')
 
 # Step 4: Setup wg-easy
@@ -408,7 +408,7 @@ EOF
 chmod 755 /opt/wg-easy/check-expiry.sh
 
 # Setup cron job for daily expiry check
-echo "0 0 * * * /bin/bash /opt/wg-easy/check-expiry.sh" > /etc/cron.d/wg-easy-expiry
+echo "0 0 * * * /bin/bash /opt/wg-easy/check-expiry.sh" | sudo tee /etc/cron.d/wg-easy-expiry >/dev/null
 chmod 644 /etc/cron.d/wg-easy-expiry
 
 # Step 9: Generate and print instructions
