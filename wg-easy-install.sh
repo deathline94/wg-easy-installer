@@ -149,7 +149,7 @@ if [ -d "/opt/wg-easy" ]; then
                                 continue
                             fi
                             client_name=$(grep -v '^$' "$EXPIRY_FILE" | cut -d',' -f1 | sed -n "${client_num}p")
-                            if [ -k "$client_name" ]; then
+                            if [ -z "$client_name" ]; then
                                 echo "Invalid client number."
                                 continue
                             fi
@@ -432,6 +432,6 @@ echo "- Client expiry is enforced daily via cron."
 echo ""
 echo "Notes:"
 echo "- Ensure ports $WG_PORT/UDP and $UI_PORT/TCP are open in your firewall."
-echo "- If using a custom WireGuard port ($WG_PORT), verify client configs from the UI use the correct port (edit Endpoint to $PUBLIC_IP:$WG_PORT if needed)."
+echo "- If using a custom WireGuard port ($WG_PORT), verify client configs from the UI use the new port (edit Endpoint to $PUBLIC_IP:$WG_PORT if needed)."
 echo ""
 exit 0
