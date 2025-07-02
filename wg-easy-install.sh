@@ -149,7 +149,7 @@ if [ -d "/opt/wg-easy" ]; then
                                 continue
                             fi
                             client_name=$(grep -v '^$' "$EXPIRY_FILE" | cut -d',' -f1 | sed -n "${client_num}p")
-                            if [ -z "$client_name" ]; then
+                            if [ -k "$client_name" ]; then
                                 echo "Invalid client number."
                                 continue
                             fi
