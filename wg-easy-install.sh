@@ -50,8 +50,8 @@ if [ -d "/opt/wg-easy" ]; then
                 # Uninstall
                 cd /opt/wg-easy
                 docker-compose down > /dev/null 2>&1
-                docker rm wg-easy > /dev/null 2>&1 2>/dev/null
-                docker network rm wg-easy_default > /dev/null 2>&1 2>/dev/null
+                docker rm wg-easy > /dev/null 2>&1
+                docker network rm wg-easy_default > /dev/null 2>&1
                 rm -rf /opt/wg-easy
                 echo ""
                 echo "wg-easy uninstalled successfully!"
@@ -73,7 +73,9 @@ if [ -d "/opt/wg-easy" ]; then
                     echo ""
                     echo "3) Remove Expiry"
                     echo ""
-                    echo "4) Back"
+                    echo "4) Extend Expiry"
+                    echo ""
+                    echo "5) Back"
                     echo ""
                     read -p "Enter your choice: " user_choice
                     case $user_choice in
@@ -123,18 +125,13 @@ if [ -d "/opt/wg-easy" ]; then
                                 echo "Invalid client number."
                                 continue
                             fi
-                            echo ""
-                            read -p "Enter expiry date for $client_name (YYYY-MM-DD): " expiry_date
-                            if [ -z "$expiry_date" ] || ! date -d "$expiry_date" >/dev/null 2>&1; then
-                                echo "Invalid date format."
-                                continue
-                            fi
+                            expiry_date=$(date -d "+30 days" +%Y-%m-%d)
                             # Update or add expiry in client_expiry.txt
                             if [ -f "$EXPIRY_FILE" ] && grep -q "^$client_name," "$EXPIRY_FILE"; then
                                 sed -i "/^$client_name,/d" "$EXPIRY_FILE"
                             fi
                             echo "$client_name,$expiry_date" >> "$EXPIRY_FILE"
-                            echo "Expiry set for $client_name to $expiry_date!"
+                            echo "Expiry set for $client_name to $expiry_date (30 days from now)!"
                             ;;
                         3)
                             # Remove Expiry
@@ -160,6 +157,31 @@ if [ -d "/opt/wg-easy" ]; then
                             echo "Expiry removed for $client_name!"
                             ;;
                         4)
+                            # Extend Expiry
+                            echo ""
+                            echo "Available clients with expiry:"
+                            if [ ! -f "$EXPIRY_FILE" ] || [ ! -s "$EXPIRY_FILE" ]; then
+                                echo "No clients with expiry found."
+                                continue
+                            fi
+                            grep -v '^$' "$EXPIRY_FILE" | cut -d',' -f1 | cat -n
+                            echo ""
+                            read -p "Enter client number to extend expiry (or 0 to cancel): " client_num
+                            if [ "$client_num" -eq 0 ]; then
+                                continue
+                            fi
+                            client_name=$(grep -v '^$' "$EXPIRY_FILE" | cut -d',' -f1 | sed -n "${client_num}p")
+                            if [ -z "$client_name" ]; then
+                                echo "Invalid client number."
+                                continue
+                            fi
+                            expiry_date=$(date -d "+30 days" +%Y-%m-%d)
+                            # Update expiry in client_expiry.txt
+                            sed -i "/^$client_name,/d" "$EXPIRY_FILE"
+                            echo "$client_name,$expiry_date" >> "$EXPIRY_FILE"
+                            echo "Expiry extended for $client_name to $expiry_date (30 days from now)!"
+                            ;;
+                        5)
                             # Back
                             break
                             ;;
@@ -401,7 +423,7 @@ echo "Protocol: UDP"
 echo ""
 echo "To manage users:"
 echo "- Use the web UI at http://$PUBLIC_IP:$UI_PORT to add/remove clients."
-echo "- Run this script and select 'Manage Users' to set/remove expiry."
+echo "- Run this script and select 'Manage Users' to set/remove/extend expiry."
 echo "- Client expiry is enforced daily via cron."
 echo ""
 echo "Notes:"
