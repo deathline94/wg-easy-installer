@@ -131,7 +131,7 @@ if [ -d "/opt/wg-easy" ]; then
                             if [ -f "$EXPIRY_FILE" ] && grep -q "^$escaped_client_name," "$EXPIRY_FILE"; then
                                 sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
                             fi
-                            echo "$escaped_client_name,$expiry_date" >> "$EXPIRY_FILE"
+                            echo "$client_name,$expiry_date" >> "$EXPIRY_FILE"
                             echo "Expiry set for $client_name to $expiry_date (30 days from now)!"
                             ;;
                         3)
@@ -181,7 +181,7 @@ if [ -d "/opt/wg-easy" ]; then
                             # Update expiry in client_expiry.txt
                             escaped_client_name=$(printf '%q' "$client_name")
                             sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
-                            echo "$escaped_client_name,$expiry_date" >> "$EXPIRY_FILE"
+                            echo "$client_name,$expiry_date" >> "$EXPIRY_FILE"
                             echo "Expiry extended for $client_name to $expiry_date (30 days from now)!"
                             ;;
                         5)
@@ -432,6 +432,6 @@ echo "- Client expiry is enforced daily via cron."
 echo ""
 echo "Notes:"
 echo "- Ensure ports $WG_PORT/UDP and $UI_PORT/TCP are open in your firewall."
-echo "- If using a custom WireGuard port ($WG_PORT), verify client configs from the UI use the new port (edit Endpoint to $PUBLIC_IP:$WG_PORT if needed)."
+echo "- If using a custom WireGuard port ($WG_PORT), verify client configs from the UI use the correct port (edit Endpoint to $PUBLIC_IP:$WG_PORT if needed)."
 echo ""
 exit 0
