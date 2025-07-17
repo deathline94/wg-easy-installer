@@ -51,7 +51,7 @@ if [ -d "/opt/wg-easy" ]; then
                 cd /opt/wg-easy
                 docker-compose down > /dev/null 2>&1
                 docker rm wg-easy > /dev/null 2>&1
-                docker network rm wg-easy_default > /dev/null 2>&1
+                docker network rm wg > /dev/null 2>&1
                 rm -rf /opt/wg-easy
                 echo ""
                 echo "wg-easy uninstalled successfully!"
@@ -126,7 +126,6 @@ if [ -d "/opt/wg-easy" ]; then
                                 continue
                             fi
                             expiry_date=$(date -d "+30 days" +%Y-%m-%d)
-                            # Update or add expiry in client_expiry.txt
                             escaped_client_name=$(printf '%q' "$client_name")
                             if [ -f "$EXPIRY_FILE" ] && grep -q "^$escaped_client_name," "$EXPIRY_FILE"; then
                                 sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
@@ -153,7 +152,6 @@ if [ -d "/opt/wg-easy" ]; then
                                 echo "Invalid client number."
                                 continue
                             fi
-                            # Remove from expiry file
                             escaped_client_name=$(printf '%q' "$client_name")
                             sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
                             echo "Expiry removed for $client_name!"
@@ -178,9 +176,9 @@ if [ -d "/opt/wg-easy" ]; then
                                 continue
                             fi
                             expiry_date=$(date -d "+30 days" +%Y-%m-%d)
-                            # Update expiry in client_expiry.txt
                             escaped_client_name=$(printf '%q' "$client_name")
                             sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
+                            client_name=$(echo "$client_name" | sed 's/\\//g')
                             echo "$client_name,$expiry_date" >> "$EXPIRY_FILE"
                             echo "Expiry extended for $client_name to $expiry_date (30 days from now)!"
                             ;;
@@ -197,13 +195,9 @@ if [ -d "/opt/wg-easy" ]; then
             3)
                 # Modify
                 cd /opt/wg-easy
-                # Get current settings from docker-compose.yml
                 current_ui_port=$(grep -oP '"\K[0-9]+:51821/tcp' docker-compose.yml | cut -d':' -f1)
-                current_wg_port=$(grep -oP '"\K[0-9]+:[0-9]+/udp' docker-compose.yml | cut -d':' -f1)
-                current_password_hash=$(grep -oP 'PASSWORD_HASH=\K[^ ]+' docker-compose.yml)
-                current_ip=$(grep -oP 'WG_HOST=\K[^ ]+' docker-compose.yml)
+                current_wg_port=$(grep -oP '"\K[0-9]+:51820/udp' docker-compose.yml | cut -d':' -f1)
 
-                # Prompt for new settings
                 echo ""
                 read -p "Enter new web UI port (or press enter to keep [$current_ui_port]): " new_ui_port
                 [ -z "$new_ui_port" ] && new_ui_port=$current_ui_port
@@ -211,12 +205,6 @@ if [ -d "/opt/wg-easy" ]; then
                 read -p "Enter new WireGuard port (or press enter to keep [$current_wg_port]): " new_wg_port
                 [ -z "$new_wg_port" ] && new_wg_port=$current_wg_port
                 echo ""
-                read -p "Enter new admin password (or press enter to keep current): " new_password
-                if [ -n "$new_password" ]; then
-                    new_password_hash=$(htpasswd -bnBC 10 "" "$new_password" | tr -d ':\n' | sed 's/\$/$$/g')
-                else
-                    new_password_hash=$current_password_hash
-                fi
 
                 # Auto-fetch new IP
                 new_ip=$(curl -s https://api.ipify.org)
@@ -235,17 +223,18 @@ version: "3.8"
 services:
   wg-easy:
     environment:
-      - WG_HOST=$new_ip
-      - PASSWORD_HASH=$new_password_hash
-      - WG_PORT=$new_wg_port
-      - WG_DEFAULT_DNS=8.8.8.8
-      - WG_DEFAULT_ADDRESS=10.8.0.x
-    image: ghcr.io/wg-easy/wg-easy:latest
+      - INSECURE=true
+    image: ghcr.io/wg-easy/wg-easy:15.1
     container_name: wg-easy
+    networks:
+      wg:
+        ipv4_address: 10.42.42.42
+        ipv6_address: fdcc:ad94:bacf:61a3::2a
     volumes:
       - .:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
     ports:
-      - "$new_wg_port:$new_wg_port/udp"
+      - "$new_wg_port:51820/udp"
       - "$new_ui_port:51821/tcp"
     restart: unless-stopped
     cap_add:
@@ -254,6 +243,15 @@ services:
     sysctls:
       - net.ipv4.ip_forward=1
       - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.default.forwarding=1
+networks:
+  wg:
+    ipam:
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64
 EOF
 
                 # Validate docker-compose.yml
@@ -271,7 +269,6 @@ EOF
                 echo "wg-easy configuration updated successfully!"
                 echo ""
                 echo "Web UI: http://$new_ip:$new_ui_port"
-                echo "Admin password: [As provided or unchanged]"
                 echo "WireGuard port: $new_wg_port/UDP"
                 echo ""
                 echo "Notes:"
@@ -325,12 +322,6 @@ echo ""
 read -p "Enter WireGuard port (or press enter for 51820): " WG_PORT
 [ -z "$WG_PORT" ] && WG_PORT=51820
 
-echo ""
-read -p "Enter admin password for web UI (or press enter for random): " ADMIN_PASSWORD
-[ -z "$ADMIN_PASSWORD" ] && ADMIN_PASSWORD=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w 16 | head -n 1)
-# Generate bcrypt hash for password and escape $ characters
-PASSWORD_HASH=$(htpasswd -bnBC 10 "" "$ADMIN_PASSWORD" | tr -d ':\n' | sed 's/\$/$$/g')
-
 # Step 4: Setup wg-easy
 mkdir -p /opt/wg-easy
 cd /opt/wg-easy
@@ -342,17 +333,18 @@ version: "3.8"
 services:
   wg-easy:
     environment:
-      - WG_HOST=$PUBLIC_IP
-      - PASSWORD_HASH=$PASSWORD_HASH
-      - WG_PORT=$WG_PORT
-      - WG_DEFAULT_DNS=8.8.8.8
-      - WG_DEFAULT_ADDRESS=10.8.0.x
-    image: ghcr.io/wg-easy/wg-easy:latest
+      - INSECURE=true
+    image: ghcr.io/wg-easy/wg-easy:15.1
     container_name: wg-easy
+    networks:
+      wg:
+        ipv4_address: 10.42.42.42
+        ipv6_address: fdcc:ad94:bacf:61a3::2a
     volumes:
       - .:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
     ports:
-      - "$WG_PORT:$WG_PORT/udp"
+      - "$WG_PORT:51820/udp"
       - "$UI_PORT:51821/tcp"
     restart: unless-stopped
     cap_add:
@@ -361,6 +353,15 @@ services:
     sysctls:
       - net.ipv4.ip_forward=1
       - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.default.forwarding=1
+networks:
+  wg:
+    ipam:
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64
 EOF
 
 # Step 5: Validate docker-compose.yml
@@ -418,7 +419,6 @@ echo ""
 echo "Web UI access:"
 echo ""
 echo "URL: http://$PUBLIC_IP:$UI_PORT"
-echo "Admin password: $ADMIN_PASSWORD"
 echo ""
 echo "WireGuard details:"
 echo ""
