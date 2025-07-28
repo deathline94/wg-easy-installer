@@ -93,9 +93,9 @@ if [ -d "/opt/wg-easy" ]; then
     echo ""
     echo "1) Uninstall"
     echo ""
-    echo "2) Manage Users"
+    echo "2) Toggle SSL Mode (switch between domain/SSL and no-domain/insecure HTTP)"
     echo ""
-    echo "3) Modify"
+    echo "3) Modify Ports"
     echo ""
     echo "4) Exit"
     echo ""
@@ -117,148 +117,99 @@ if [ -d "/opt/wg-easy" ]; then
         exit 0
         ;;
       2)
-        # Manage Users (unchanged from your original)
-        cd /opt/wg-easy
-        WG_JSON="/opt/wg-easy/wg0.json"
-        EXPIRY_FILE="/opt/wg-easy/client_expiry.txt"
-        while true; do
-          echo ""
-          echo "User Management Menu:"
-          echo ""
-          echo "1) List Clients"
-          echo ""
-          echo "2) Set Expiry"
-          echo ""
-          echo "3) Remove Expiry"
-          echo ""
-          echo "4) Extend Expiry"
-          echo ""
-          echo "5) Back"
-          echo ""
-          read -p "Enter your choice: " user_choice
-          case $user_choice in
-            1)
-              # List Clients
-              echo ""
-              echo "Clients:"
-              echo ""
-              if [ ! -s "$WG_JSON" ] || [ "$(jq '.clients | length' "$WG_JSON")" -eq 0 ]; then
-                echo "No clients found."
-              else
-                i=1
-                jq -r '.clients | to_entries | .[] | .value.name' "$WG_JSON" | while IFS= read -r client_name; do
-                  if [ -n "$client_name" ]; then
-                    escaped_client_name=$(printf '%q' "$client_name")
-                    expiry=""
-                    if [ -f "$EXPIRY_FILE" ]; then
-                      expiry=$(grep "^$escaped_client_name," "$EXPIRY_FILE" | cut -d',' -f2)
-                    fi
-                    if [ -n "$expiry" ]; then
-                      echo "$i) $client_name (Expires: $expiry)"
-                    else
-                      echo "$i) $client_name (No expiry)"
-                    fi
-                    ((i++))
-                  fi
-                done
-              fi
-              echo ""
-              ;;
-            2)
-              # Set Expiry
-              echo ""
-              echo "Available clients:"
-              if [ ! -s "$WG_JSON" ] || [ "$(jq '.clients | length' "$WG_JSON")" -eq 0 ]; then
-                echo "No clients found."
-                continue
-              fi
-              jq -r '.clients | to_entries | .[] | "\(.value.name)"' "$WG_JSON" | cat -n
-              echo ""
-              read -p "Enter client number to set expiry (or 0 to cancel): " client_num
-              if [ "$client_num" -eq 0 ]; then
-                continue
-              fi
-              client_name=$(jq -r '.clients | to_entries | .['$((client_num-1))'].value.name' "$WG_JSON")
-              if [ -z "$client_name" ]; then
-                echo "Invalid client number."
-                continue
-              fi
-              expiry_date=$(date -d "+30 days" +%Y-%m-%d)
-              escaped_client_name=$(printf '%q' "$client_name")
-              if [ -f "$EXPIRY_FILE" ] && grep -q "^$escaped_client_name," "$EXPIRY_FILE"; then
-                sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
-              fi
-              echo "$client_name,$expiry_date" >> "$EXPIRY_FILE"
-              echo "Expiry set for $client_name to $expiry_date (30 days from now)!"
-              ;;
-            3)
-              # Remove Expiry
-              echo ""
-              echo "Available clients with expiry:"
-              if [ ! -f "$EXPIRY_FILE" ] || [ ! -s "$EXPIRY_FILE" ]; then
-                echo "No clients with expiry found."
-                continue
-              fi
-              grep -v '^$' "$EXPIRY_FILE" | cut -d',' -f1 | cat -n
-              echo ""
-              read -p "Enter client number to remove expiry (or 0 to cancel): " client_num
-              if [ "$client_num" -eq 0 ]; then
-                continue
-              fi
-              client_name=$(grep -v '^$' "$EXPIRY_FILE" | cut -d',' -f1 | sed -n "${client_num}p")
-              if [ -z "$client_name" ]; then
-                echo "Invalid client number."
-                continue
-              fi
-              escaped_client_name=$(printf '%q' "$client_name")
-              sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
-              echo "Expiry removed for $client_name!"
-              ;;
-            4)
-              # Extend Expiry
-              echo ""
-              echo "Available clients with expiry:"
-              if [ ! -f "$EXPIRY_FILE" ] || [ ! -s "$EXPIRY_FILE" ]; then
-                echo "No clients with expiry found."
-                continue
-              fi
-              grep -v '^$' "$EXPIRY_FILE" | cut -d',' -f1 | cat -n
-              echo ""
-              read -p "Enter client number to extend expiry (or 0 to cancel): " client_num
-              if [ "$client_num" -eq 0 ]; then
-                continue
-              fi
-              client_name=$(grep -v '^$' "$EXPIRY_FILE" | cut -d',' -f1 | sed -n "${client_num}p")
-              if [ -z "$client_name" ]; then
-                echo "Invalid client number."
-                continue
-              fi
-              expiry_date=$(date -d "+30 days" +%Y-%m-%d)
-              escaped_client_name=$(printf '%q' "$client_name")
-              sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
-              client_name=$(echo "$client_name" | sed 's/\\//g')
-              echo "$client_name,$expiry_date" >> "$EXPIRY_FILE"
-              echo "Expiry extended for $client_name to $expiry_date (30 days from now)!"
-              ;;
-            5)
-              # Back
-              break
-              ;;
-            *)
-              echo "Invalid choice."
-              ;;
-          esac
-        done
-        ;;
-      3)
-        # Modify
+        # Toggle SSL Mode
         cd /opt/wg-easy
         current_ui_port=$(grep -oP '"\K[0-9]+:51821/tcp' docker-compose.yml | cut -d':' -f1)
         current_wg_port=$(grep -oP '"\K[0-9]+:51820/udp' docker-compose.yml | cut -d':' -f1)
         current_domain=$(grep -oP 'server_name \K[^;]+' /etc/nginx/sites-available/wg-easy 2>/dev/null || echo "")
         echo ""
-        read -p "Enter new domain (or press enter to keep [$current_domain], leave blank for no domain/insecure HTTP): " new_domain
-        [ -z "$new_domain" ] && new_domain=$current_domain
+        read -p "Enter domain for SSL (or press enter to disable SSL and use insecure HTTP on IP): " new_domain
+        [ -z "$new_domain" ] && new_domain=""
+        # Auto-fetch new IP
+        new_ip=$(curl -s https://api.ipify.org)
+        if [ -z "$new_ip" ]; then
+          echo "Failed to detect public IP."
+          exit 1
+        fi
+        if ! [[ "$new_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Invalid IP format."
+          exit 1
+        fi
+        # Determine Docker UI port mapping based on domain (secure vs insecure)
+        if [ -n "$new_domain" ]; then
+          ui_mapping="- \"127.0.0.1:51822:51821/tcp\""  # Internal for SSL/Nginx
+        else
+          ui_mapping="- \"$current_ui_port:51821/tcp\""  # Public for insecure HTTP
+          # Remove Nginx config if switching to no domain
+          rm -f /etc/nginx/sites-available/wg-easy /etc/nginx/sites-enabled/wg-easy
+          systemctl restart nginx > /dev/null 2>&1
+        fi
+        # Update docker-compose.yml (keep current ports)
+        cat << EOF > docker-compose.yml
+version: "3.8"
+services:
+  wg-easy:
+    environment:
+      - INSECURE=true
+    image: ghcr.io/wg-easy/wg-easy:15.1
+    container_name: wg-easy
+    networks:
+      wg:
+        ipv4_address: 10.42.42.42
+        ipv6_address: fdcc:ad94:bacf:61a3::2a
+    volumes:
+      - .:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
+    ports:
+      - "$current_wg_port:51820/udp"
+      $ui_mapping
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.default.forwarding=1
+networks:
+  wg:
+    ipam:
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64
+EOF
+        # Validate docker-compose.yml
+        docker-compose config > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
+          echo "Invalid docker-compose.yml syntax."
+          exit 1
+        fi
+        # Restart service
+        docker-compose down > /dev/null 2>&1
+        docker-compose up -d > /dev/null 2>&1
+        # Reconfigure Nginx only if domain is provided
+        if [ -n "$new_domain" ]; then
+          configure_nginx "$new_domain" "$current_ui_port" "$new_ip"
+        fi
+        echo ""
+        echo "SSL mode toggled successfully!"
+        echo ""
+        if [ -n "$new_domain" ]; then
+          echo "Web UI: https://$new_domain:$current_ui_port"
+        else
+          echo "Web UI: http://$new_ip:$current_ui_port (insecure - no SSL)"
+        fi
+        echo ""
+        exit 0
+        ;;
+      3)
+        # Modify Ports
+        cd /opt/wg-easy
+        current_ui_port=$(grep -oP '"\K[0-9]+:51821/tcp' docker-compose.yml | cut -d':' -f1)
+        current_wg_port=$(grep -oP '"\K[0-9]+:51820/udp' docker-compose.yml | cut -d':' -f1)
+        current_domain=$(grep -oP 'server_name \K[^;]+' /etc/nginx/sites-available/wg-easy 2>/dev/null || echo "")
         echo ""
         read -p "Enter new web UI port (or press enter to keep [$current_ui_port]): " new_ui_port
         [ -z "$new_ui_port" ] && new_ui_port=$current_ui_port
@@ -276,14 +227,11 @@ if [ -d "/opt/wg-easy" ]; then
           echo "Invalid IP format."
           exit 1
         fi
-        # Determine Docker UI port mapping based on domain (secure vs insecure)
-        if [ -n "$new_domain" ]; then
+        # Determine Docker UI port mapping based on current domain (secure vs insecure)
+        if [ -n "$current_domain" ]; then
           ui_mapping="- \"127.0.0.1:51822:51821/tcp\""  # Internal for SSL/Nginx
         else
           ui_mapping="- \"$new_ui_port:51821/tcp\""  # Public for insecure HTTP
-          # Remove any existing Nginx config if switching to no domain
-          rm -f /etc/nginx/sites-available/wg-easy /etc/nginx/sites-enabled/wg-easy
-          systemctl restart nginx > /dev/null 2>&1
         fi
         # Update docker-compose.yml
         cat << EOF > docker-compose.yml
@@ -330,15 +278,15 @@ EOF
         # Restart service
         docker-compose down > /dev/null 2>&1
         docker-compose up -d > /dev/null 2>&1
-        # Reconfigure Nginx only if domain is provided
-        if [ -n "$new_domain" ]; then
-          configure_nginx "$new_domain" "$new_ui_port" "$new_ip"
+        # Reconfigure Nginx if domain exists (ports changed)
+        if [ -n "$current_domain" ]; then
+          configure_nginx "$current_domain" "$new_ui_port" "$new_ip"
         fi
         echo ""
-        echo "wg-easy configuration updated successfully!"
+        echo "Ports updated successfully!"
         echo ""
-        if [ -n "$new_domain" ]; then
-          echo "Web UI: https://$new_domain:$new_ui_port"
+        if [ -n "$current_domain" ]; then
+          echo "Web UI: https://$current_domain:$new_ui_port"
         else
           echo "Web UI: http://$new_ip:$new_ui_port (insecure - no SSL)"
         fi
@@ -346,7 +294,6 @@ EOF
         echo ""
         echo "Notes:"
         echo "- If you changed the WireGuard port, verify client configs from the UI use the new port (edit Endpoint to $new_ip:$new_wg_port if needed)."
-        echo "- Access is via custom port only (no port 80/443 usage)."
         echo ""
         exit 0
         ;;
@@ -387,7 +334,7 @@ if ! [[ "$PUBLIC_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
-# Step 3: Prompt user for input (no email prompt, domain is optional)
+# Step 3: Prompt user for input (domain is optional)
 echo ""
 read -p "Enter domain for SSL (e.g., wg.example.com, or press enter for insecure HTTP on IP): " DOMAIN
 echo ""
@@ -469,35 +416,7 @@ if [ -n "$DOMAIN" ]; then
   configure_nginx "$DOMAIN" "$UI_PORT" "$PUBLIC_IP"
 fi
 
-# Step 8: Setup expiry check script (unchanged from your original)
-cat << 'EOF' > /opt/wg-easy/check-expiry.sh
-#!/bin/bash
-WG_JSON="/opt/wg-easy/wg0.json"
-EXPIRY_FILE="/opt/wg-easy/client_expiry.txt"
-CURRENT_DATE=$(date +%Y-%m-%d)
-if [ -f "$EXPIRY_FILE" ]; then
-  while IFS=, read -r client_name expiry_date; do
-    if [ -n "$client_name" ] && [ -n "$expiry_date" ]; then
-      if [[ "$CURRENT_DATE" > "$expiry_date" || "$CURRENT_DATE" == "$expiry_date" ]]; then
-        escaped_client_name=$(printf '%q' "$client_name")
-        client_id=$(jq -r ".clients | to_entries | .[] | select(.value.name == \"$client_name\") | .key" "$WG_JSON")
-        if [ -n "$client_id" ]; then
-          jq "del(.clients.\"$client_id\")" "$WG_JSON" > tmp.json && mv tmp.json "$WG_JSON"
-          sed -i "/^$escaped_client_name,/d" "$EXPIRY_FILE"
-          docker-compose -f /opt/wg-easy/docker-compose.yml restart > /dev/null 2>&1
-        fi
-      fi
-    fi
-  done < "$EXPIRY_FILE"
-fi
-EOF
-chmod 755 /opt/wg-easy/check-expiry.sh
-
-# Setup cron job for daily expiry check
-echo "0 0 * * * /bin/bash /opt/wg-easy/check-expiry.sh" | sudo tee /etc/cron.d/wg-easy-expiry >/dev/null
-chmod 644 /etc/cron.d/wg-easy-expiry
-
-# Step 9: Generate and print instructions
+# Step 8: Generate and print instructions (no expiry/cron anymore)
 echo ""
 echo "wg-easy installation complete!"
 echo ""
@@ -514,17 +433,11 @@ echo ""
 echo "Server: $PUBLIC_IP:$WG_PORT"
 echo "Protocol: UDP"
 echo ""
-echo "To manage users:"
-echo "- Use the web UI to add/remove clients."
-echo "- Run this script and select 'Manage Users' to set/remove/extend expiry."
-echo "- Client expiry is enforced daily via cron."
-echo ""
 echo "Notes:"
 echo "- Ensure ports $WG_PORT/UDP and $UI_PORT/TCP are open in your firewall."
 echo "- If using a custom WireGuard port ($WG_PORT), verify client configs from the UI use the correct port (edit Endpoint to $PUBLIC_IP:$WG_PORT if needed)."
 if [ -n "$DOMAIN" ]; then
   echo "- Nginx is set up for reverse proxy and SSL on custom port only; check /etc/nginx/sites-available/wg-easy for config."
 fi
-echo "- No conflicts with services on port 80 (e.g., Xray)."
 echo ""
 exit 0
