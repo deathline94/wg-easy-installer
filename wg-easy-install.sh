@@ -35,22 +35,18 @@ configure_nginx() {
   local ui_port="$2"
   local public_ip="$3"
 
-  # Stop if domain is empty (should not happen since we check before calling)
   if [ -z "$domain" ]; then
     return
   fi
 
-  # Stop Nginx temporarily for standalone Certbot (avoids port conflicts)
   systemctl stop nginx > /dev/null 2>&1
 
-  # Obtain/renew SSL cert with Certbot standalone mode (no email required)
   certbot certonly --standalone --non-interactive --agree-tos --register-unsafely-without-email -d "$domain" > /dev/null 2>&1
   if [ $? -ne 0 ]; then
     echo "Failed to obtain SSL certificate. Check domain DNS and ensure no conflicts during validation."
     exit 1
   fi
 
-  # Create Nginx config (listen only on custom UI port for HTTPS, proxy to fixed internal port)
   cat << EOF > /etc/nginx/sites-available/wg-easy
 server {
     listen $ui_port ssl;
@@ -60,7 +56,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/$domain/privkey.pem;
 
     location / {
-        proxy_pass http://localhost:51822;  # Fixed internal port for wg-easy
+        proxy_pass http://localhost:51822;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -72,7 +68,6 @@ server {
 }
 EOF
 
-  # Enable the site
   ln -sf /etc/nginx/sites-available/wg-easy /etc/nginx/sites-enabled/
   nginx -t > /dev/null 2>&1
   if [ $? -ne 0 ]; then
@@ -80,7 +75,6 @@ EOF
     exit 1
   fi
 
-  # Restart Nginx
   systemctl restart nginx > /dev/null 2>&1
 }
 
@@ -102,13 +96,11 @@ if [ -d "/opt/wg-easy" ]; then
     read -p "Enter your choice: " choice
     case $choice in
       1)
-        # Uninstall
         cd /opt/wg-easy
         docker-compose down > /dev/null 2>&1
         docker rm wg-easy > /dev/null 2>&1
         docker network rm wg > /dev/null 2>&1
         rm -rf /opt/wg-easy
-        # Remove Nginx config if exists
         rm -f /etc/nginx/sites-available/wg-easy /etc/nginx/sites-enabled/wg-easy
         systemctl restart nginx > /dev/null 2>&1
         echo ""
@@ -117,15 +109,15 @@ if [ -d "/opt/wg-easy" ]; then
         exit 0
         ;;
       2)
-        # Toggle SSL Mode
         cd /opt/wg-easy
         current_ui_port=$(grep -oP '"\K[0-9]+:51821/tcp' docker-compose.yml | cut -d':' -f1)
         current_wg_port=$(grep -oP '"\K[0-9]+:51820/udp' docker-compose.yml | cut -d':' -f1)
         current_domain=$(grep -oP 'server_name \K[^;]+' /etc/nginx/sites-available/wg-easy 2>/dev/null || echo "")
+
         echo ""
         read -p "Enter domain for SSL (or press enter to disable SSL and use insecure HTTP on IP): " new_domain
         [ -z "$new_domain" ] && new_domain=""
-        # Auto-fetch new IP
+
         new_ip=$(curl -s https://api.ipify.org)
         if [ -z "$new_ip" ]; then
           echo "Failed to detect public IP."
@@ -135,16 +127,19 @@ if [ -d "/opt/wg-easy" ]; then
           echo "Invalid IP format."
           exit 1
         fi
-        # Determine Docker UI port mapping based on domain (secure vs insecure)
+
         if [ -n "$new_domain" ]; then
-          ui_mapping="- \"127.0.0.1:51822:51821/tcp\""  # Internal for SSL/Nginx
+          ui_mapping="- \"127.0.0.1:51822:51821/tcp\""
+          new_ui_port=$current_ui_port
         else
-          ui_mapping="- \"$current_ui_port:51821/tcp\""  # Public for insecure HTTP
-          # Remove Nginx config if switching to no domain
+          echo ""
+          read -p "Enter new web UI port for insecure mode (default 51821): " new_ui_port
+          [ -z "$new_ui_port" ] && new_ui_port=51821
+          ui_mapping="- \"$new_ui_port:51821/tcp\""
           rm -f /etc/nginx/sites-available/wg-easy /etc/nginx/sites-enabled/wg-easy
           systemctl restart nginx > /dev/null 2>&1
         fi
-        # Update docker-compose.yml (keep current ports)
+
         cat << EOF > docker-compose.yml
 version: "3.8"
 services:
@@ -180,36 +175,35 @@ networks:
         - subnet: 10.42.42.0/24
         - subnet: fdcc:ad94:bacf:61a3::/64
 EOF
-        # Validate docker-compose.yml
+
         docker-compose config > /dev/null 2>&1
         if [ $? -ne 0 ]; then
           echo "Invalid docker-compose.yml syntax."
           exit 1
         fi
-        # Restart service
+
         docker-compose down > /dev/null 2>&1
         docker-compose up -d > /dev/null 2>&1
-        # Reconfigure Nginx only if domain is provided
+
         if [ -n "$new_domain" ]; then
           configure_nginx "$new_domain" "$current_ui_port" "$new_ip"
-        fi
-        echo ""
-        echo "SSL mode toggled successfully!"
-        echo ""
-        if [ -n "$new_domain" ]; then
+          echo ""
+          echo "SSL mode enabled!"
           echo "Web UI: https://$new_domain:$current_ui_port"
         else
-          echo "Web UI: http://$new_ip:$current_ui_port (insecure - no SSL)"
+          echo ""
+          echo "Insecure mode enabled!"
+          echo "Web UI: http://$new_ip:$new_ui_port (insecure - no SSL)"
         fi
         echo ""
         exit 0
         ;;
       3)
-        # Modify Ports
         cd /opt/wg-easy
         current_ui_port=$(grep -oP '"\K[0-9]+:51821/tcp' docker-compose.yml | cut -d':' -f1)
         current_wg_port=$(grep -oP '"\K[0-9]+:51820/udp' docker-compose.yml | cut -d':' -f1)
         current_domain=$(grep -oP 'server_name \K[^;]+' /etc/nginx/sites-available/wg-easy 2>/dev/null || echo "")
+
         echo ""
         read -p "Enter new web UI port (or press enter to keep [$current_ui_port]): " new_ui_port
         [ -z "$new_ui_port" ] && new_ui_port=$current_ui_port
@@ -217,7 +211,7 @@ EOF
         read -p "Enter new WireGuard port (or press enter to keep [$current_wg_port]): " new_wg_port
         [ -z "$new_wg_port" ] && new_wg_port=$current_wg_port
         echo ""
-        # Auto-fetch new IP
+
         new_ip=$(curl -s https://api.ipify.org)
         if [ -z "$new_ip" ]; then
           echo "Failed to detect public IP."
@@ -227,13 +221,13 @@ EOF
           echo "Invalid IP format."
           exit 1
         fi
-        # Determine Docker UI port mapping based on current domain (secure vs insecure)
+
         if [ -n "$current_domain" ]; then
-          ui_mapping="- \"127.0.0.1:51822:51821/tcp\""  # Internal for SSL/Nginx
+          ui_mapping="- \"127.0.0.1:51822:51821/tcp\""
         else
-          ui_mapping="- \"$new_ui_port:51821/tcp\""  # Public for insecure HTTP
+          ui_mapping="- \"$new_ui_port:51821/tcp\""
         fi
-        # Update docker-compose.yml
+
         cat << EOF > docker-compose.yml
 version: "3.8"
 services:
@@ -269,19 +263,20 @@ networks:
         - subnet: 10.42.42.0/24
         - subnet: fdcc:ad94:bacf:61a3::/64
 EOF
-        # Validate docker-compose.yml
+
         docker-compose config > /dev/null 2>&1
         if [ $? -ne 0 ]; then
           echo "Invalid docker-compose.yml syntax."
           exit 1
         fi
-        # Restart service
+
         docker-compose down > /dev/null 2>&1
         docker-compose up -d > /dev/null 2>&1
-        # Reconfigure Nginx if domain exists (ports changed)
+
         if [ -n "$current_domain" ]; then
           configure_nginx "$current_domain" "$new_ui_port" "$new_ip"
         fi
+
         echo ""
         echo "Ports updated successfully!"
         echo ""
@@ -298,7 +293,6 @@ EOF
         exit 0
         ;;
       4)
-        # Exit
         exit 0
         ;;
       *)
@@ -308,10 +302,8 @@ EOF
   done
 fi
 
-# Install required packages if not already installed
 install_required_packages
 
-# Step 1: Check OS and architecture
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 if [ "$OS" != "Linux" ]; then
@@ -319,11 +311,10 @@ if [ "$OS" != "Linux" ]; then
   exit 1
 fi
 case "$ARCH" in
-  x86_64|amd64|arm64) ;; # Supported architectures
+  x86_64|amd64|arm64) ;;
   *) echo "Unsupported architecture"; exit 1;;
 esac
 
-# Step 2: Auto-fetch public IP
 PUBLIC_IP=$(curl -s https://api.ipify.org)
 if [ -z "$PUBLIC_IP" ]; then
   echo "Failed to detect public IP."
@@ -334,7 +325,6 @@ if ! [[ "$PUBLIC_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
-# Step 3: Prompt user for input (domain is optional)
 echo ""
 read -p "Enter domain for SSL (e.g., wg.example.com, or press enter for insecure HTTP on IP): " DOMAIN
 echo ""
@@ -344,19 +334,16 @@ echo ""
 read -p "Enter WireGuard port (or press enter for 51820): " WG_PORT
 [ -z "$WG_PORT" ] && WG_PORT=51820
 
-# Step 4: Setup wg-easy
 mkdir -p /opt/wg-easy
 cd /opt/wg-easy
 chmod -R 755 /opt/wg-easy
 
-# Determine Docker UI port mapping based on domain (secure vs insecure)
 if [ -n "$DOMAIN" ]; then
-  ui_mapping="- \"127.0.0.1:51822:51821/tcp\""  # Internal for SSL/Nginx
+  ui_mapping="- \"127.0.0.1:51822:51821/tcp\""
 else
-  ui_mapping="- \"$UI_PORT:51821/tcp\""  # Public for insecure HTTP
+  ui_mapping="- \"$UI_PORT:51821/tcp\""
 fi
 
-# Create docker-compose.yml
 cat << EOF > docker-compose.yml
 version: "3.8"
 services:
@@ -393,30 +380,25 @@ networks:
         - subnet: fdcc:ad94:bacf:61a3::/64
 EOF
 
-# Step 5: Validate docker-compose.yml
 docker-compose config > /dev/null 2>&1
 if [ $? -ne 0 ]; then
   echo "Invalid docker-compose.yml syntax."
   exit 1
 fi
 
-# Step 6: Enable and start Docker
 systemctl enable docker > /dev/null 2>&1
 systemctl start docker > /dev/null 2>&1
 
-# Step 7: Run wg-easy
 docker-compose up -d > /dev/null 2>&1
 if [ $? -ne 0 ]; then
   echo "Failed to start wg-easy container."
   exit 1
 fi
 
-# Step 7.5: Configure Nginx reverse proxy and SSL only if domain provided
 if [ -n "$DOMAIN" ]; then
   configure_nginx "$DOMAIN" "$UI_PORT" "$PUBLIC_IP"
 fi
 
-# Step 8: Generate and print instructions (no expiry/cron anymore)
 echo ""
 echo "wg-easy installation complete!"
 echo ""
