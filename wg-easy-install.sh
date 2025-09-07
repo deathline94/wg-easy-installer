@@ -207,10 +207,6 @@ EOF
         echo ""
         read -p "Enter new web UI port (or press enter to keep [$current_ui_port]): " new_ui_port
         [ -z "$new_ui_port" ] && new_ui_port=$current_ui_port
-        echo ""
-        read -p "Enter new WireGuard port (or press enter to keep [$current_wg_port]): " new_wg_port
-        [ -z "$new_wg_port" ] && new_wg_port=$current_wg_port
-        echo ""
 
         new_ip=$(curl -s https://api.ipify.org)
         if [ -z "$new_ip" ]; then
@@ -244,7 +240,7 @@ services:
       - .:/etc/wireguard
       - /lib/modules:/lib/modules:ro
     ports:
-      - "$new_wg_port:51820/udp"
+      - "$current_wg_port:51820/udp"
       $ui_mapping
     restart: unless-stopped
     cap_add:
@@ -285,10 +281,6 @@ EOF
         else
           echo "Web UI: http://$new_ip:$new_ui_port (insecure - no SSL)"
         fi
-        echo "WireGuard port: $new_wg_port/UDP"
-        echo ""
-        echo "Notes:"
-        echo "- If you changed the WireGuard port, verify client configs from the UI use the new port (edit Endpoint to $new_ip:$new_wg_port if needed)."
         echo ""
         exit 0
         ;;
@@ -330,9 +322,7 @@ read -p "Enter domain for SSL (e.g., wg.example.com, or press enter for insecure
 echo ""
 read -p "Enter web UI port (or press enter for 51821): " UI_PORT
 [ -z "$UI_PORT" ] && UI_PORT=51821
-echo ""
-read -p "Enter WireGuard port (or press enter for 51820): " WG_PORT
-[ -z "$WG_PORT" ] && WG_PORT=51820
+WG_PORT=51820
 
 mkdir -p /opt/wg-easy
 cd /opt/wg-easy
@@ -417,7 +407,6 @@ echo "Protocol: UDP"
 echo ""
 echo "Notes:"
 echo "- Ensure ports $WG_PORT/UDP and $UI_PORT/TCP are open in your firewall."
-echo "- If using a custom WireGuard port ($WG_PORT), verify client configs from the UI use the correct port (edit Endpoint to $PUBLIC_IP:$WG_PORT if needed)."
 if [ -n "$DOMAIN" ]; then
   echo "- Nginx is set up for reverse proxy and SSL on custom port only; check /etc/nginx/sites-available/wg-easy for config."
 fi
