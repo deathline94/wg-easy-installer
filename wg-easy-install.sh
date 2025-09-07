@@ -110,7 +110,7 @@ if [ -d "/opt/wg-easy" ]; then
         ;;
       2)
         cd /opt/wg-easy
-        # Find current ports. Note: Grep must now match the port number on BOTH sides.
+        # Find current ports.
         current_ui_port=$(grep -oP '"\K[0-9]+:51821/tcp' docker-compose.yml | cut -d':' -f1)
         current_wg_port=$(grep -oP '"\K[0-9]+:[0-9]+/udp' docker-compose.yml | grep -E '([0-9]+):\1' | cut -d':' -f1)
         [ -z "$current_wg_port" ] && current_wg_port=$(grep -oP '"\K[0-9]+:51820/udp' docker-compose.yml | cut -d':' -f1) # Fallback for old config
@@ -406,6 +406,10 @@ fi
 
 systemctl enable docker > /dev/null 2>&1
 systemctl start docker > /dev/null 2>&1
+
+# THIS IS THE FIX: Wait for Docker daemon to stabilize before launching compose
+echo "Waiting 10 seconds for Docker daemon to initialize..."
+sleep 10
 
 docker-compose up -d > /dev/null 2>&1
 if [ $? -ne 0 ]; then
